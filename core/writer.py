@@ -22,6 +22,11 @@ def _or_headers() -> dict:
     }
 
 
+def _parse_json_response(raw: str) -> dict:
+    clean = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    return json.loads(clean)
+
+
 def gather_web_context(keyword: str) -> str:
     """Pull top search snippets and extract clean text from top organic pages."""
     try:
@@ -76,6 +81,150 @@ def _chat_completion(model: str, messages: list[dict], json_mode: bool = False) 
     )
     res.raise_for_status()
     return res.json()["choices"][0]["message"]["content"].strip()
+
+
+def expand_table_column(column: str, rows: list[dict], settings: dict) -> list[dict]:
+    """Populate blank cells for main_keyword, title, keywords (NLP), or outline."""
+    model = settings.get("model", "nvidia/nemotron-3.5-lightning")
+    language = settings.get("language", "English")
+    tone = settings.get("tone", "Informative & Engaging")
+    size = settings.get("article_size", "Medium")
+    use_web = bool(settings.get("connect_to_web", False))
+    h2_count_map = {"Small": 4, "Medium": 6, "Large": 9}
+    target_h2s = h2_count_map.get(size, 6)
+
+    sys_msg = (
+        "You are an expert SEO strategist. Respond ONLY with valid JSON. "
+        "Do not wrap the JSON in markdown fences."
+    )
+
+    if column == "main_keyword":
+        existing_kws = [r["main_keyword"].strip() for r in rows if r.get("main_keyword", "").strip()]
+        if not existing_kws:
+            raise ValueError("Enter at least one seed Main Keyword first (for example, in Row 1).")
+
+        empty_indices = [i for i, r in enumerate(rows) if not r.get("main_keyword", "").strip()]
+        if not empty_indices:
+            raise ValueError("No empty rows found. Click '+ Add Row' first so there are blank rows to fill.")
+
+        seed = existing_kws[0]
+        needed = len(empty_indices)
+        serp_hint = ""
+        if use_web:
+            try:
+                hits = DDGS().text(seed, max_results=5)
+                if hits:
+                    serp_hint = "Live search topics:\n" + "\n".join(f"- {h.get('title', '')}" for h in hits)
+            except Exception:
+                pass
+
+        prompt = f"""Generate {needed} distinct, high-intent SEO main keywords related to the seed topic "{seed}" in {language}.
+Do NOT repeat any of these existing keywords: {json.dumps(existing_kws)}
+{serp_hint}
+
+Return a JSON object with this exact key:
+- "keywords": array of exactly {needed} keyword strings
+"""
+        raw = _chat_completion(model, [{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], json_mode=True)
+        generated = _parse_json_response(raw).get("keywords", [])
+
+        for idx, kw in zip(empty_indices, generated):
+            rows[idx]["main_keyword"] = str(kw).strip()
+        return rows
+
+    if column == "title":
+        targets = [
+            {"id": r["id"], "main_keyword": r["main_keyword"].strip(), "keywords": r.get("keywords", "").strip()}
+            for r in rows
+            if r.get("main_keyword", "").strip() and not r.get("title", "").strip()
+        ]
+        if not targets:
+            raise ValueError("No rows need a Title (make sure Main Keyword is filled and Title is blank).")
+
+        prompt = f"""Write compelling, click-worthy SEO article titles (H1) in {language} with a "{tone}" tone for each item below.
+Include each item's main_keyword naturally.
+
+Items:
+{json.dumps(targets, indent=2)}
+
+Return a JSON object with this exact key:
+- "items": array of objects with {{"id": "...", "title": "..."}}
+"""
+        raw = _chat_completion(model, [{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], json_mode=True)
+        result_map = {item["id"]: item["title"] for item in _parse_json_response(raw).get("items", []) if "id" in item}
+        for r in rows:
+            if r["id"] in result_map:
+                r["title"] = str(result_map[r["id"]]).strip()
+        return rows
+
+    if column == "keywords":
+        targets = []
+        for r in rows:
+            kw = r.get("main_keyword", "").strip()
+            if kw and not r.get("keywords", "").strip():
+                serp_terms = ""
+                if use_web:
+                    try:
+                        hits = DDGS().text(kw, max_results=3)
+                        serp_terms = " | ".join(h.get("body", "")[:120] for h in hits)
+                    except Exception:
+                        pass
+                targets.append({
+                    "id": r["id"],
+                    "main_keyword": kw,
+                    "title": r.get("title", "").strip(),
+                    "serp_context": serp_terms,
+                })
+
+        if not targets:
+            raise ValueError("No rows need Secondary Keywords (make sure Main Keyword is filled and Keywords is blank).")
+
+        prompt = f"""For each item below, generate 8 to 12 comma-separated semantic / NLP keywords and related search terms in {language}.
+
+Items:
+{json.dumps(targets, indent=2)}
+
+Return a JSON object with this exact key:
+- "items": array of objects with {{"id": "...", "keywords": "term 1, term 2, term 3"}}
+"""
+        raw = _chat_completion(model, [{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], json_mode=True)
+        result_map = {item["id"]: item["keywords"] for item in _parse_json_response(raw).get("items", []) if "id" in item}
+        for r in rows:
+            if r["id"] in result_map:
+                r["keywords"] = str(result_map[r["id"]]).strip()
+        return rows
+
+    if column == "outline":
+        targets = [
+            {
+                "id": r["id"],
+                "main_keyword": r["main_keyword"].strip(),
+                "title": r.get("title", "").strip(),
+                "keywords": r.get("keywords", "").strip(),
+            }
+            for r in rows
+            if r.get("main_keyword", "").strip() and not r.get("outline", "").strip()
+        ]
+        if not targets:
+            raise ValueError("No rows need an Outline (make sure Main Keyword is filled and Outline is blank).")
+
+        prompt = f"""Create a structured {target_h2s}-section H2 article outline in {language} for each item below.
+Format each outline as a single line separated by " | " (example: "H2: Intro Topic | H2: Key Factor 1 | H2: Comparison").
+
+Items:
+{json.dumps(targets, indent=2)}
+
+Return a JSON object with this exact key:
+- "items": array of objects with {{"id": "...", "outline": "H2: ... | H2: ..."}}
+"""
+        raw = _chat_completion(model, [{"role": "system", "content": sys_msg}, {"role": "user", "content": prompt}], json_mode=True)
+        result_map = {item["id"]: item["outline"] for item in _parse_json_response(raw).get("items", []) if "id" in item}
+        for r in rows:
+            if r["id"] in result_map:
+                r["outline"] = str(result_map[r["id"]]).strip()
+        return rows
+
+    raise ValueError(f"Unsupported column: {column}")
 
 
 def generate_seedream_image(subject: str, site_style: dict, out_path: str) -> str:
@@ -137,7 +286,6 @@ def process_article_job(row: dict, settings: dict, site: dict, status_cb=None) -
     target_h2s = h2_count_map.get(size, 6)
     words_per_h2 = words_per_h2_map.get(size, 350)
 
-    # 1. Optional Web Grounding & Internal Links
     web_context = ""
     if settings.get("connect_to_web"):
         update("Researching SERPs...")
@@ -148,7 +296,6 @@ def process_article_job(row: dict, settings: dict, site: dict, status_cb=None) -
         update("Fetching internal links...")
         existing_posts = get_existing_posts(site)
 
-    # 2. Generate Article Blueprint (JSON)
     update("Building outline...")
     plan_system = (
         "You are an expert SEO content architect. Respond ONLY with valid JSON. "
@@ -184,16 +331,13 @@ Return a JSON object with these exact keys:
         {"role": "user", "content": plan_user},
     ], json_mode=True)
 
-    # Clean potential markdown fences just in case
-    clean_json = re.sub(r"^```(?:json)?|```$", "", raw_plan.strip(), flags=re.MULTILINE).strip()
-    plan = json.loads(clean_json)
+    plan = _parse_json_response(raw_plan)
 
     final_title = plan.get("title") or title_hint or keyword.title()
     h2_sections = plan.get("h2_sections", [])
 
-    # 3. Generate Images (1 Featured + 1 per 3 H2s)
     featured_media_id = None
-    in_body_urls = {}  # maps H2 index -> uploaded WP image URL
+    in_body_urls = {}
     site_style = site.get("image_style", {})
     run_stamp = int(time.time())
     safe_slug = re.sub(r"[^a-z0-9]+", "-", keyword.lower()).strip("-")[:30]
@@ -206,7 +350,6 @@ Return a JSON object with these exact keys:
         uploaded_feat = upload_image(site, feat_path, alt_text=alt_text)
         featured_media_id = uploaded_feat["id"]
 
-        # 1 image per 3 H2s (placed after H2 #3 [idx 2], H2 #6 [idx 5], H2 #9 [idx 8], etc.)
         target_indices = [i for i in range(2, len(h2_sections), 3)]
         for idx_num, h2_idx in enumerate(target_indices, start=1):
             update(f"Generating body image {idx_num}/{len(target_indices)}...")
@@ -217,7 +360,6 @@ Return a JSON object with these exact keys:
             uploaded_body = upload_image(site, body_img_path, alt_text=sec.get("heading", keyword))
             in_body_urls[h2_idx] = (uploaded_body["url"], sec.get("heading", keyword))
 
-    # 4. Assemble HTML & Draft Sections
     html_parts = [plan.get("intro_html", "")]
 
     if settings.get("key_takeaways") and plan.get("key_takeaways"):
@@ -285,7 +427,6 @@ Output clean semantic HTML (<p>, <h3>, <ul>, <li>, <table>, <strong>) ONLY. No m
 
     final_html = "\n\n".join(html_parts)
 
-    # 5. Publish to LocalWP
     update("Publishing to LocalWP...")
     post_status = settings.get("post_status") or site.get("default_status", "draft")
     post_result = create_post(

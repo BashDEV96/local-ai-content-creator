@@ -5,13 +5,13 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
-from core.writer import process_article_job
+from core.writer import process_article_job, expand_table_column
 
 app = Flask(__name__)
 
 SITES_FILE = "sites.json"
 JOBS_LOCK = threading.Lock()
-JOBS = {}  # row_id -> {"status": str, "state": "idle|running|done|error", "post_url": str, "error": str}
+JOBS = {}
 EXECUTOR = ThreadPoolExecutor(max_workers=2)
 
 
@@ -40,6 +40,19 @@ def api_sites():
         save_sites(sites)
         return jsonify({"ok": True, "sites": sites})
     return jsonify({"sites": load_sites()})
+
+
+@app.route("/api/expand-column", methods=["POST"])
+def api_expand_column():
+    data = request.get_json(force=True)
+    column = data.get("column", "")
+    rows = data.get("rows", [])
+    settings = data.get("settings", {})
+    try:
+        updated_rows = expand_table_column(column, rows, settings)
+        return jsonify({"ok": True, "rows": updated_rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/import", methods=["POST"])
@@ -74,7 +87,6 @@ def api_import():
             col_map["outline"] = col
 
     if "main_keyword" not in col_map:
-        # Fallback: treat first column as main_keyword
         col_map["main_keyword"] = df.columns[0]
 
     rows = []
