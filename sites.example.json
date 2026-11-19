@@ -1,0 +1,17 @@
+{
+  "sites": [
+    {
+      "name": "My First Local Site",
+      "url": "http://your-site-name.local",
+      "username": "admin",
+      "app_password": "xxxx xxxx xxxx xxxx xxxx xxxx",
+      "default_status": "draft",
+      "image_style": {
+        "base_style": "editorial photography, natural lighting, sharp focus, 35mm lens",
+        "color_palette": "clean natural tones, balanced contrast",
+        "negative_rules": "no text, no watermarks, no borders, no split screen",
+        "aspect_ratio": "16:9"
+      }
+    }
+  ]
+}

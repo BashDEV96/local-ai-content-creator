@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local SEO Bulk Engine</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased" x-data="seoApp()" x-init="init()">
+
+  <!-- Top Navbar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-30 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">
+          ⚡
+        </div>
+        <div>
+          <h1 class="text-base font-semibold tracking-tight text-white">Local SEO Bulk Engine</h1>
+          <p class="text-xs text-slate-400">OpenRouter + LocalWP Auto-Publisher • GPL-3.0</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button @click="openSiteModal()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition cursor-pointer">
+          ⚙️ Sites & Visual Styles (<span x-text="sites.length"></span>)
+        </button>
+        <button @click="runBatch()" :disabled="isRunning"
+          class="px-5 py-2 text-sm font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 shadow-lg shadow-emerald-500/20 transition cursor-pointer">
+          <span x-show="!isRunning">▶ Run Bulk Batch</span>
+          <span x-show="isRunning">⏳ Running Jobs...</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- 1. Bulk Input Table -->
+    <section class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-semibold text-white">1. Bulk Article Queue</h2>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300" x-text="rows.length + ' rows'"></span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="file" x-ref="fileInput" @change="importSpreadsheet($event)" accept=".csv,.xlsx,.xls" class="hidden" />
+          <button @click="$refs.fileInput.click()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition cursor-pointer">
+            📄 Import Excel / CSV
+          </button>
+          <button @click="addRow()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer">
+            + Add Row
+          </button>
+          <button @click="clearDone()" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition cursor-pointer">
+            Clear Done
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-800 bg-slate-950/50 text-[11px] uppercase tracking-wider text-slate-400">
+              <th class="py-2.5 px-3 w-10 text-center">#</th>
+              <th class="py-2.5 px-3 w-1/4">Main Keyword *</th>
+              <th class="py-2.5 px-3 w-1/4">Title (Optional)</th>
+              <th class="py-2.5 px-3 w-1/5">Secondary Keywords</th>
+              <th class="py-2.5 px-3 w-1/5">Outline Notes</th>
+              <th class="py-2.5 px-3 w-44">Status</th>
+              <th class="py-2.5 px-2 w-10"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/70 text-sm">
+            <template x-for="(row, idx) in rows" :key="row.id">
+              <tr class="hover:bg-slate-800/30 transition">
+                <td class="py-2 px-3 text-center text-xs text-slate-500" x-text="idx + 1"></td>
+                <td class="py-2 px-2">
+                  <input type="text" x-model="row.main_keyword" placeholder="e.g. best ultralight backpacking tent"
+                    class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none" />
+                </td>
+                <td class="py-2 px-2">
+                  <input type="text" x-model="row.title" placeholder="Auto-generated if blank"
+                    class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none" />
+                </td>
+                <td class="py-2 px-2">
+                  <input type="text" x-model="row.keywords" placeholder="dyneema, 2 person, waterproof"
+                    class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none" />
+                </td>
+                <td class="py-2 px-2">
+                  <input type="text" x-model="row.outline" placeholder="Compare weight, price, durability"
+                    class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none" />
+                </td>
+                <td class="py-2 px-3">
+                  <template x-if="!jobs[row.id]">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-400">Ready</span>
+                  </template>
+                  <template x-if="jobs[row.id]">
+                    <div>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        :class="{
+                          'bg-amber-500/20 text-amber-300 border border-amber-500/30': jobs[row.id].state === 'running',
+                          'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': jobs[row.id].state === 'done',
+                          'bg-rose-500/20 text-rose-300 border border-rose-500/30': jobs[row.id].state === 'error'
+                        }"
+                        x-text="jobs[row.id].status">
+                      </span>
+                      <template x-if="jobs[row.id].post_url">
+                        <a :href="jobs[row.id].post_url" target="_blank" class="block text-[11px] text-emerald-400 hover:underline mt-0.5">
+                          View on LocalWP ↗
+                        </a>
+                      </template>
+                      <template x-if="jobs[row.id].error">
+                        <span class="block text-[11px] text-rose-400 mt-0.5 truncate max-w-[160px]" :title="jobs[row.id].error" x-text="jobs[row.id].error"></span>
+                      </template>
+                    </div>
+                  </template>
+                </td>
+                <td class="py-2 px-2 text-center">
+                  <button @click="removeRow(idx)" class="text-slate-500 hover:text-rose-400 text-base leading-none cursor-pointer" title="Remove row">×</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2. Core Settings -->
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-white">2. Core Generation Settings</h2>
+        <label class="inline-flex items-center gap-2.5 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg">
+          <input type="checkbox" x-model="settings.connect_to_web" class="rounded accent-emerald-500 w-4 h-4" />
+          <span class="text-xs font-medium text-emerald-400">🌐 Connect to Web (Live DuckDuckGo SERP & Competitor Scraping)</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">OpenRouter Text Model</label>
+          <input type="text" x-model="settings.model"
+            class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Language</label>
+          <select x-model="settings.language" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+            <option>English</option>
+            <option>Spanish</option>
+            <option>French</option>
+            <option>German</option>
+            <option>Portuguese</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Article Size</label>
+          <select x-model="settings.article_size" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+            <option value="Small">Small (~1,200 words • 4 H2s)</option>
+            <option value="Medium">Medium (~2,400 words • 6 H2s)</option>
+            <option value="Large">Large (~3,500 words • 9 H2s)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Tone of Voice</label>
+          <select x-model="settings.tone" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+            <option>Informative & Engaging</option>
+            <option>Conversational & Friendly</option>
+            <option>Authoritative & Professional</option>
+            <option>Practical & No-Fluff</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Point of View</label>
+          <select x-model="settings.pov" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+            <option>Second Person (You)</option>
+            <option>First Person Plural (We)</option>
+            <option>First Person Singular (I)</option>
+            <option>Third Person (He/She/They)</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 & 4. Media Hub + Structure & Formatting -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- 3. Media Hub -->
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-white">3. Media Hub (Seedream 5.0 Lite)</h2>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            1 Featured + 1 per 3 H2s
+          </span>
+        </div>
+
+        <div class="flex flex-wrap gap-4">
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="settings.auto_images" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">Auto-Generate Images</span>
+          </label>
+
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" x-model="settings.keyword_alt_text" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">Main Keyword as Hero Alt-Text</span>
+          </label>
+        </div>
+
+        <!-- Active Site Visual DNA Preview -->
+        <template x-if="activeSite()">
+          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Active Site Visual Look-and-Feel</span>
+              <button @click="openSiteModal()" class="text-[11px] text-emerald-400 hover:underline cursor-pointer">Edit Style</button>
+            </div>
+            <p class="text-xs text-slate-300"><strong class="text-slate-400">Style:</strong> <span x-text="activeSite().image_style?.base_style || 'Not set'"></span></p>
+            <p class="text-xs text-slate-300"><strong class="text-slate-400">Palette:</strong> <span x-text="activeSite().image_style?.color_palette || 'Not set'"></span></p>
+          </div>
+        </template>
+      </section>
+
+      <!-- 4. Structure & Formatting -->
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-white">4. Structure & Formatting</h2>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-slate-400 mr-1">Hook:</span>
+            <template x-for="h in ['Question', 'Stat', 'Story']" :key="h">
+              <button @click="settings.hook_style = h"
+                class="px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer"
+                :class="settings.hook_style === h ? 'bg-emerald-500 text-slate-950' : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'"
+                x-text="h">
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
+          <label class="inline-flex items-center gap-2 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-2 rounded-lg">
+            <input type="checkbox" x-model="settings.key_takeaways" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">Key Takeaways</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-2 rounded-lg">
+            <input type="checkbox" x-model="settings.h3s" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">H3 Subheadings</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-2 rounded-lg">
+            <input type="checkbox" x-model="settings.lists" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">Bullet Lists</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-2 rounded-lg">
+            <input type="checkbox" x-model="settings.tables" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">Tables</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-2 rounded-lg">
+            <input type="checkbox" x-model="settings.faq" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">FAQ Section</span>
+          </label>
+          <label class="inline-flex items-center gap-2 cursor-pointer bg-slate-950 border border-slate-800 px-3 py-2 rounded-lg">
+            <input type="checkbox" x-model="settings.conclusion" class="rounded accent-emerald-500 w-4 h-4" />
+            <span class="text-xs text-slate-200">Conclusion</span>
+          </label>
+        </div>
+      </section>
+    </div>
+
+    <!-- 5. Publishing & Links -->
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-4">
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Target LocalWP Site</label>
+          <select x-model.number="siteIndex" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white min-w-[220px] focus:outline-none">
+            <template x-for="(s, i) in sites" :key="i">
+              <option :value="i" x-text="s.name + ' (' + s.url + ')'"></option>
+            </template>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Post Status</label>
+          <select x-model="settings.post_status" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+            <option value="draft">Save as Draft</option>
+            <option value="publish">Publish Immediately</option>
+          </select>
+        </div>
+
+        <label class="inline-flex items-center gap-2 cursor-pointer mt-4">
+          <input type="checkbox" x-model="settings.internal_linking" class="rounded accent-emerald-500 w-4 h-4" />
+          <span class="text-xs text-slate-200">🔗 Auto Internal Linking (from existing LocalWP posts)</span>
+        </label>
+      </div>
+
+      <button @click="runBatch()" :disabled="isRunning"
+        class="px-6 py-2.5 text-sm font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 shadow-lg shadow-emerald-500/20 transition cursor-pointer">
+        ▶ Run Bulk Batch
+      </button>
+    </section>
+  </main>
+
+  <!-- Site & Image Style Editor Modal -->
+  <div x-show="showSiteModal" style="display: none;" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-semibold text-white">LocalWP Sites & Visual Look-and-Feel</h3>
+        <button @click="showSiteModal = false" class="text-slate-400 hover:text-white text-xl cursor-pointer">×</button>
+      </div>
+
+      <template x-for="(s, idx) in editableSites" :key="idx">
+        <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-emerald-400" x-text="'Site #' + (idx + 1)"></span>
+            <button x-show="editableSites.length > 1" @click="editableSites.splice(idx, 1)" class="text-xs text-rose-400 hover:underline cursor-pointer">Remove</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Site Name</label>
+              <input type="text" x-model="s.name" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">LocalWP URL</label>
+              <input type="text" x-model="s.url" placeholder="http://my-site.local" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">WP Username</label>
+              <input type="text" x-model="s.username" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">WP Application Password</label>
+              <input type="text" x-model="s.app_password" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+            </div>
+          </div>
+          <div class="pt-1 border-t border-slate-800/80 space-y-2">
+            <span class="block text-[11px] font-medium text-indigo-300">Seedream Image Look-and-Feel</span>
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Base Visual Style</label>
+              <input type="text" x-model="s.image_style.base_style" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Color Palette</label>
+                <input type="text" x-model="s.image_style.color_palette" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Negative Rules</label>
+                <input type="text" x-model="s.image_style.negative_rules" class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <div class="flex items-center justify-between pt-2">
+        <button @click="addEditableSite()" class="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer">
+          + Add Another LocalWP Site
+        </button>
+        <div class="flex gap-2">
+          <button @click="showSiteModal = false" class="px-4 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-300 cursor-pointer">Cancel</button>
+          <button @click="saveSitesModal()" class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer">Save sites.json</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function seoApp() {
+      return {
+        sites: [],
+        siteIndex: 0,
+        showSiteModal: false,
+        editableSites: [],
+        rows: [
+          { id: 'row-' + Math.random().toString(36).slice(2, 7), main_keyword: '', title: '', keywords: '', outline: '' }
+        ],
+        jobs: {},
+        isRunning: false,
+        settings: {
+          model: 'nvidia/nemotron-3.5-lightning',
+          language: 'English',
+          article_size: 'Medium',
+          tone: 'Informative & Engaging',
+          pov: 'Second Person (You)',
+          connect_to_web: true,
+          auto_images: true,
+          keyword_alt_text: true,
+          hook_style: 'Question',
+          key_takeaways: true,
+          h3s: true,
+          lists: true,
+          tables: true,
+          faq: true,
+          conclusion: true,
+          post_status: 'draft',
+          internal_linking: true
+        },
+
+        async init() {
+          const res = await fetch('/api/sites');
+          const data = await res.json();
+          this.sites = data.sites || [];
+          setInterval(() => this.pollJobs(), 1500);
+        },
+
+        activeSite() {
+          return this.sites[this.siteIndex] || null;
+        },
+
+        addRow() {
+          this.rows.push({
+            id: 'row-' + Math.random().toString(36).slice(2, 7),
+            main_keyword: '',
+            title: '',
+            keywords: '',
+            outline: ''
+          });
+        },
+
+        removeRow(idx) {
+          if (this.rows.length > 1) {
+            this.rows.splice(idx, 1);
+          } else {
+            this.rows[0] = { id: 'row-' + Math.random().toString(36).slice(2, 7), main_keyword: '', title: '', keywords: '', outline: '' };
+          }
+        },
+
+        clearDone() {
+          this.rows = this.rows.filter(r => this.jobs[r.id]?.state !== 'done');
+          if (this.rows.length === 0) this.addRow();
+        },
+
+        async importSpreadsheet(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch('/api/import', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
+          if (data.rows && data.rows.length) {
+            const nonEmpty = this.rows.filter(r => r.main_keyword.trim() !== '');
+            this.rows = [...nonEmpty, ...data.rows];
+          }
+          event.target.value = '';
+        },
+
+        async runBatch() {
+          const validRows = this.rows.filter(r => r.main_keyword.trim() !== '');
+          if (!validRows.length) {
+            alert('Enter at least one Main Keyword first.');
+            return;
+          }
+          this.isRunning = true;
+          const res = await fetch('/api/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rows: validRows,
+              settings: this.settings,
+              site_index: this.siteIndex
+            })
+          });
+          const data = await res.json();
+          if (data.error) {
+            alert(data.error);
+            this.isRunning = false;
+          }
+        },
+
+        async pollJobs() {
+          try {
+            const res = await fetch('/api/jobs');
+            const data = await res.json();
+            this.jobs = data.jobs || {};
+            const anyRunning = Object.values(this.jobs).some(j => j.state === 'running');
+            this.isRunning = anyRunning;
+          } catch (e) {}
+        },
+
+        openSiteModal() {
+          this.editableSites = JSON.parse(JSON.stringify(this.sites));
+          this.showSiteModal = true;
+        },
+
+        addEditableSite() {
+          this.editableSites.push({
+            name: 'New LocalWP Site',
+            url: 'http://new-site.local',
+            username: 'admin',
+            app_password: '',
+            default_status: 'draft',
+            image_style: {
+              base_style: 'editorial photography, natural lighting, sharp focus',
+              color_palette: 'clean natural tones, balanced contrast',
+              negative_rules: 'no text, no watermarks, no borders',
+              aspect_ratio: '16:9'
+            }
+          });
+        },
+
+        async saveSitesModal() {
+          const res = await fetch('/api/sites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sites: this.editableSites })
+          });
+          const data = await res.json();
+          if (data.ok) {
+            this.sites = data.sites;
+            this.showSiteModal = false;
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# Secrets & local WordPress credentials
+.env
+sites.json
+
+# Python virtual environment & bytecode cache
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated media & local workspace files
+workspace/*
+!workspace/.gitkeep
+
+# Local scratch test script & OS files
+test_handshake.py
+.DS_Store
+Thumbs.db
