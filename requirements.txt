@@ -1,0 +1,9 @@
+flask
+openai
+ddgs
+trafilatura
+requests
+python-dotenv
+pandas
+openpyxl
+pillow
