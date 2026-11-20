@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from flask import Flask, render_template, request, jsonify
 from core.writer import process_article_job, expand_table_column
+from core.wordpress import get_categories
 
 app = Flask(__name__)
 
@@ -40,6 +41,20 @@ def api_sites():
         save_sites(sites)
         return jsonify({"ok": True, "sites": sites})
     return jsonify({"sites": load_sites()})
+
+
+@app.route("/api/categories", methods=["POST"])
+def api_categories():
+    data = request.get_json(force=True)
+    site_index = int(data.get("site_index", 0))
+    sites = load_sites()
+    if not sites or site_index >= len(sites):
+        return jsonify({"categories": []})
+    try:
+        cats = get_categories(sites[site_index])
+        return jsonify({"categories": cats})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/expand-column", methods=["POST"])

@@ -308,9 +308,19 @@
       <div class="flex flex-wrap items-center gap-4">
         <div>
           <label class="block text-[11px] uppercase tracking-wider text-slate-400 mb-1">Target LocalWP Site</label>
-          <select x-model.number="siteIndex" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white min-w-[220px] focus:outline-none">
+          <select x-model.number="siteIndex" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white min-w-[200px] focus:outline-none">
             <template x-for="(s, i) in sites" :key="i">
               <option :value="i" x-text="s.name + ' (' + s.url + ')'"></option>
+            </template>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] uppercase tracking-wider text-emerald-400 mb-1">Pillar Category</label>
+          <select x-model="settings.main_category" class="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white min-w-[160px] focus:outline-none">
+            <option value="Auto-Detect">✨ Auto-Detect / Create</option>
+            <template x-for="cat in wpCategories" :key="cat.id">
+              <option :value="cat.name" x-text="cat.name"></option>
             </template>
           </select>
         </div>
@@ -325,7 +335,7 @@
 
         <label class="inline-flex items-center gap-2 cursor-pointer mt-4">
           <input type="checkbox" x-model="settings.internal_linking" class="rounded accent-emerald-500 w-4 h-4" />
-          <span class="text-xs text-slate-200">🔗 Auto Internal Linking (from existing LocalWP posts)</span>
+          <span class="text-xs text-slate-200">🔗 Silo Internal Linking</span>
         </label>
       </div>
 
@@ -404,6 +414,7 @@
     function seoApp() {
       return {
         sites: [],
+        wpCategories: [],
         siteIndex: 0,
         showSiteModal: false,
         editableSites: [],
@@ -429,6 +440,7 @@
           tables: true,
           faq: true,
           conclusion: true,
+          main_category: 'Auto-Detect',
           post_status: 'draft',
           internal_linking: true
         },
@@ -437,7 +449,32 @@
           const res = await fetch('/api/sites');
           const data = await res.json();
           this.sites = data.sites || [];
+          if (this.sites.length > 0) {
+            this.fetchCategories();
+          }
+          this.$watch('siteIndex', () => this.fetchCategories());
           setInterval(() => this.pollJobs(), 1500);
+        },
+
+        async fetchCategories() {
+          if (!this.sites[this.siteIndex]) return;
+          try {
+            const res = await fetch('/api/categories', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ site_index: this.siteIndex })
+            });
+            const data = await res.json();
+            // Filter out empty/unnamed categories to keep the list clean
+            this.wpCategories = (data.categories || []).filter(c => c.name);
+            
+            // Reset to Auto-Detect if the previously selected category doesn't exist on this site
+            if (this.settings.main_category !== 'Auto-Detect' && !this.wpCategories.find(c => c.name === this.settings.main_category)) {
+              this.settings.main_category = 'Auto-Detect';
+            }
+          } catch (e) {
+            this.wpCategories = [];
+          }
         },
 
         activeSite() {
@@ -574,6 +611,7 @@
           if (data.ok) {
             this.sites = data.sites;
             this.showSiteModal = false;
+            this.fetchCategories();
           }
         }
       };
