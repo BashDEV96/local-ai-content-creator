@@ -3,7 +3,6 @@ import html
 import requests
 
 def get_categories(site: dict) -> list[dict]:
-    """Fetch existing categories from LocalWP."""
     wp_url = site["url"].rstrip("/")
     auth = (site["username"], site["app_password"])
     try:
@@ -19,7 +18,6 @@ def get_categories(site: dict) -> list[dict]:
         return []
 
 def ensure_category(site: dict, name: str, parent_id: int = 0) -> int:
-    """Find or create a category, optionally nesting it under a parent."""
     wp_url = site["url"].rstrip("/")
     auth = (site["username"], site["app_password"])
     
@@ -39,7 +37,6 @@ def ensure_category(site: dict, name: str, parent_id: int = 0) -> int:
     return 0
 
 def ensure_tag(site: dict, name: str) -> int:
-    """Find or create a tag."""
     wp_url = site["url"].rstrip("/")
     auth = (site["username"], site["app_password"])
     try:
@@ -59,35 +56,7 @@ def ensure_tag(site: dict, name: str) -> int:
         pass
     return 0
 
-def get_existing_posts(site: dict, limit: int = 100) -> list[dict]:
-    """Fetch existing post titles, URLs, and taxonomy IDs for strict silo internal linking."""
-    wp_url = site["url"].rstrip("/")
-    auth = (site["username"], site["app_password"])
-    try:
-        res = requests.get(
-            f"{wp_url}/wp-json/wp/v2/posts",
-            auth=auth,
-            params={"per_page": limit, "status": "publish", "_fields": "title,link,categories,tags"},
-            timeout=15,
-        )
-        res.raise_for_status()
-        posts = []
-        for item in res.json():
-            raw_title = item.get("title", {}).get("rendered", "")
-            link = item.get("link", "")
-            if raw_title and link:
-                posts.append({
-                    "title": html.unescape(raw_title), 
-                    "link": link,
-                    "categories": item.get("categories", []),
-                    "tags": item.get("tags", [])
-                })
-        return posts
-    except Exception:
-        return []
-
 def upload_image(site: dict, image_path: str, alt_text: str = "") -> dict:
-    """Upload a local image to LocalWP Media Library and attach SEO alt-text."""
     wp_url = site["url"].rstrip("/")
     auth = (site["username"], site["app_password"])
     filename = os.path.basename(image_path)
@@ -105,18 +74,7 @@ def upload_image(site: dict, image_path: str, alt_text: str = "") -> dict:
         )
     media_res.raise_for_status()
     data = media_res.json()
-    media_id = data["id"]
-    source_url = data["source_url"]
-
-    if alt_text:
-        requests.post(
-            f"{wp_url}/wp-json/wp/v2/media/{media_id}",
-            auth=auth,
-            json={"alt_text": alt_text},
-            timeout=15,
-        )
-
-    return {"id": media_id, "url": source_url}
+    return {"id": data["id"], "url": data["source_url"]}
 
 def create_post(
     site: dict,
@@ -129,7 +87,6 @@ def create_post(
     categories: list[int] | None = None,
     tags: list[int] | None = None,
 ) -> dict:
-    """Create a post on LocalWP, assigning it to its siloed categories and tags."""
     wp_url = site["url"].rstrip("/")
     auth = (site["username"], site["app_password"])
 

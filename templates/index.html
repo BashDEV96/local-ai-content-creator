@@ -350,11 +350,6 @@
             <option value="publish">Publish Immediately</option>
           </select>
         </div>
-
-        <label class="inline-flex items-center gap-2 cursor-pointer mt-4">
-          <input type="checkbox" x-model="settings.internal_linking" class="rounded accent-emerald-500 w-4 h-4" />
-          <span class="text-xs text-slate-200">🔗 Silo Internal Linking</span>
-        </label>
       </div>
 
       <button @click="runBatch()" :disabled="isRunning"
@@ -443,7 +438,7 @@
         jobs: {},
         isRunning: false,
         settings: {
-          model: 'deepseek/deepseek-v4.1-flash-1017', // updated default just in case!
+          model: 'deepseek/deepseek-v4.1-flash-1017',
           article_type: 'Blog',
           language: 'English',
           article_size: 'Medium',
@@ -460,8 +455,7 @@
           faq: true,
           conclusion: true,
           main_category: 'Auto-Detect',
-          post_status: 'draft',
-          internal_linking: true
+          post_status: 'draft'
         },
 
         async init() {
@@ -484,7 +478,9 @@
               body: JSON.stringify({ site_index: this.siteIndex })
             });
             const data = await res.json();
-            this.wpCategories = (data.categories || []).filter(c => c.name);
+            
+            // OPTION A FIX: Filter only top-level categories (parent === 0) and remove "Uncategorized"
+            this.wpCategories = (data.categories || []).filter(c => c.name && c.parent === 0 && c.name !== 'Uncategorized');
             
             if (this.settings.main_category !== 'Auto-Detect' && !this.wpCategories.find(c => c.name === this.settings.main_category)) {
               this.settings.main_category = 'Auto-Detect';
