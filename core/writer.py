@@ -217,7 +217,6 @@ def process_article_job(row: dict, settings: dict, site: dict, status_cb=None) -
     update("Building blueprint & taxonomy...")
     plan_system = "You are an expert SEO content architect. Respond ONLY with valid JSON. Do not wrap the JSON in markdown fences."
     
-    # DYNAMIC BLUEPRINT SCHEMA: Only include Key Takeaways and FAQ if checked in UI
     schema_lines = [
         '- "title": string (compelling SEO H1. NEVER use colons (:), dashes (—/–), or hyphens (-) anywhere in the title)',
         '- "slug": string (url-friendly)',
@@ -293,15 +292,23 @@ Return a JSON object with these exact keys:
             in_body_urls[h2_idx] = (uploaded_body["url"], sec.get("heading", keyword))
 
     update("Writing full article (One-Shot Draft)...")
+    
+    # NEW: Strip "image_subject" out of the blueprint before passing it to the writer
+    writer_plan = {k: v for k, v in plan.items()}
+    writer_plan["h2_sections"] = [{k: v for k, v in sec.items() if k != "image_subject"} for sec in plan.get("h2_sections", [])]
+
     formatting_rules = []
     if settings.get("h3s"): formatting_rules.append("Use 2-3 `###` subheadings inside EVERY `##` section to ensure deep coverage.")
     if settings.get("lists"): formatting_rules.append("Include bullet lists where appropriate.")
     if settings.get("tables"): formatting_rules.append("Include Markdown tables when comparing options, specs, or timelines. ALWAYS leave a blank line before and after every table so it formats correctly.")
     
     formatting_rules.append("Write short, engaging paragraphs for mobile readability (mostly 2 to 3 sentences). Do NOT make every single sentence its own paragraph. Separate paragraphs with a blank line.")
+    
+    # NEW: Explicitly ban hallucinating image tags
+    formatting_rules.append("NEVER output Markdown image tags (`![...]`), HTML `<img>` tags, or image placeholders. Images are injected automatically by the system.")
+    
     rules_str = " ".join(formatting_rules)
 
-    # DYNAMIC ARTICLE FLOW: Tell the writer exactly what sections to include
     article_flow = ["Intro hook"]
     if settings.get("key_takeaways"): article_flow.append("Key Takeaways")
     article_flow.append("all H2s")
@@ -318,7 +325,7 @@ Formatting Rules: {rules_str}
 Current Year: {current_year}
 
 Here is the EXACT structural blueprint you MUST follow from start to finish:
-{json.dumps(plan, indent=2)}
+{json.dumps(writer_plan, indent=2)}
 
 INSTRUCTIONS:
 1. Write the ENTIRE article in one go ({flow_str}).
@@ -349,7 +356,7 @@ INSTRUCTIONS:
                 blocks[block_idx] = f"\n\n![{img_alt}]({img_url})\n\n" + blocks[block_idx].lstrip()
         final_markdown = "".join(blocks)
     
-    # SAVE MARKDOWN TO DISK (Obsidian-Ready)
+    # SAVE MARKDOWN TO DISK
     update("Saving Markdown locally...")
     os.makedirs("workspace/articles", exist_ok=True)
     md_file_path = f"workspace/articles/{safe_slug}-{run_stamp}.md"
