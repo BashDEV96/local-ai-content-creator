@@ -50,7 +50,7 @@ This tool is incredibly powerful when used for the right reasons:
 
 1. **Clone the repository and navigate to the directory:**
    ```bash
-   git clone https://github.com/your-username/local-seo-engine.git
+   git clone https://github.com/BashDEV96/local-ai-content-creator
    cd local-seo-engine
    ```
 
