@@ -10,7 +10,7 @@ Designed to run smoothly on modest local hardware by offloading LLM and image ge
 - **Live Web Grounding:** Optional DuckDuckGo SERP search + `trafilatura` competitor page extraction before outlining.
 - **Multi-Section Long-Form Drafting:** Generates a structured JSON blueprint first, then writes each H2 section individually via OpenRouter (defaulting to `nvidia/nemotron-3.5-lightning`).
 - **Cohesive Per-Site Visual DNA:** Generates **1 Featured Image + 1 body image per 3 H2s** via `bytedance-seed/seedream-5-0-lite`, automatically styled using each site's visual look-and-feel rules in `sites.json`.
-- **Direct LocalWP Publishing:** Automatically discovers existing posts for internal linking, uploads images with SEO alt-text to the Media Library, and creates drafts or published posts via the WordPress REST API.
+- **Direct LocalWP Publishing:** Uploads images with SEO alt-text to the Media Library, and creates drafts or published posts via the WordPress REST API.
 
 ## Quickstart Setup
 
