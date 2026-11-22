@@ -293,7 +293,6 @@ Return a JSON object with these exact keys:
 
     update("Writing full article (One-Shot Draft)...")
     
-    # NEW: Strip "image_subject" out of the blueprint before passing it to the writer
     writer_plan = {k: v for k, v in plan.items()}
     writer_plan["h2_sections"] = [{k: v for k, v in sec.items() if k != "image_subject"} for sec in plan.get("h2_sections", [])]
 
@@ -303,8 +302,6 @@ Return a JSON object with these exact keys:
     if settings.get("tables"): formatting_rules.append("Include Markdown tables when comparing options, specs, or timelines. ALWAYS leave a blank line before and after every table so it formats correctly.")
     
     formatting_rules.append("Write short, engaging paragraphs for mobile readability (mostly 2 to 3 sentences). Do NOT make every single sentence its own paragraph. Separate paragraphs with a blank line.")
-    
-    # NEW: Explicitly ban hallucinating image tags
     formatting_rules.append("NEVER output Markdown image tags (`![...]`), HTML `<img>` tags, or image placeholders. Images are injected automatically by the system.")
     
     rules_str = " ".join(formatting_rules)
@@ -341,13 +338,9 @@ INSTRUCTIONS:
         {"role": "user", "content": body_prompt},
     ])
     
-    # Clean fences
     final_markdown = re.sub(r"^```(?:markdown)?|```$", "", raw_markdown.strip(), flags=re.MULTILINE).strip()
-    
-    # H1 STRIPPER
     final_markdown = re.sub(r'^#\s+.*?\n+', '', final_markdown.lstrip(), count=1)
 
-    # Smart Body Image Injection
     if in_body_urls:
         blocks = re.split(r'(^##\s+.*$)', final_markdown, flags=re.MULTILINE)
         for h2_idx, (img_url, img_alt) in in_body_urls.items():
@@ -356,26 +349,7 @@ INSTRUCTIONS:
                 blocks[block_idx] = f"\n\n![{img_alt}]({img_url})\n\n" + blocks[block_idx].lstrip()
         final_markdown = "".join(blocks)
     
-    # SAVE MARKDOWN TO DISK
-    update("Saving Markdown locally...")
-    os.makedirs("workspace/articles", exist_ok=True)
-    md_file_path = f"workspace/articles/{safe_slug}-{run_stamp}.md"
-    
-    tags_yaml = "\n  - ".join([""] + plan.get("tags", [])) if plan.get("tags") else "[]"
-    frontmatter = f"""---
-title: "{final_title}"
-slug: "{plan.get('slug', safe_slug)}"
-description: "{plan.get('meta_description', '')}"
-category: "{cat_to_use}"
-tags:{tags_yaml}
-date: {current_date}
----
-
-"""
-    with open(md_file_path, "w", encoding="utf-8") as md_file:
-        md_file.write(frontmatter + final_markdown)
-
-    # CONVERT TO HTML
+    # CONVERT TO HTML & PUBLISH FIRST
     final_html = markdown.markdown(final_markdown, extensions=['tables', 'fenced_code'])
 
     update("Publishing to LocalWP...")
@@ -392,10 +366,42 @@ date: {current_date}
         tags=list(set(post_tag_ids))
     )
 
+    # SAVE ENRICHED MARKDOWN TO DISK
+    update("Saving Enriched Markdown locally...")
+    os.makedirs("workspace/articles", exist_ok=True)
+    md_file_path = f"workspace/articles/{safe_slug}-{run_stamp}.md"
+    
+    tags_yaml = "\n  - " + "\n  - ".join(plan.get("tags", [])) if plan.get("tags") else "[]"
+    subcats_yaml = "\n  - " + "\n  - ".join(plan.get("subcategories", [])) if plan.get("subcategories") else "[]"
+    word_count = len(final_markdown.split())
+    site_url = site.get("url", "unknown")
+    post_id = post_result.get("id", "")
+    post_url = post_result.get("link", "")
+
+    frontmatter = f"""---
+title: "{final_title}"
+slug: "{plan.get('slug', safe_slug)}"
+description: "{plan.get('meta_description', '')}"
+category: "{cat_to_use}"
+subcategories: {subcats_yaml}
+tags: {tags_yaml}
+date: {current_date}
+article-type: "{article_type}"
+word-count: {word_count}
+status: "{post_status}"
+site: "{site_url}"
+post-id: {post_id}
+post-url: "{post_url}"
+---
+
+"""
+    with open(md_file_path, "w", encoding="utf-8") as md_file:
+        md_file.write(frontmatter + final_markdown)
+
     update("Done")
     return {
         "title": final_title,
-        "post_id": post_result["id"],
-        "post_url": post_result["link"],
+        "post_id": post_id,
+        "post_url": post_url,
         "status": post_status,
     }
